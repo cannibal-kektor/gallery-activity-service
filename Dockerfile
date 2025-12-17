@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/home/gradle/.gradle \
 
 FROM eclipse-temurin:25-jdk-alpine AS optimizer
 WORKDIR /opt/build
-#COPY --from=builder /opt/build/app/image-service/target/*.jar app.jar
+
 COPY --from=builder /opt/build/app/activity-service/build/libs/*.jar app.jar
 
 RUN java -Djarmode=tools -jar app.jar extract --layers --destination extracted
