@@ -11,9 +11,8 @@ import org.springframework.data.mongodb.core.convert.MappingMongoConverter
 @Configuration
 class MongoConfig {
     @Bean
-    fun mongoTransactionManager(dbFactory: MongoDatabaseFactory): MongoTransactionManager {
-        return MongoTransactionManager(dbFactory)
-    }
+    fun mongoTransactionManager(dbFactory: MongoDatabaseFactory) =
+        MongoTransactionManager(dbFactory)
 
     @Bean
     fun mongoTemplate(

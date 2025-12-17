@@ -38,19 +38,15 @@ class KafkaConfig(
     }
 
     @Bean
-    fun kafkaContainerCustomizer(executor: ThreadPoolTaskExecutor)
-            : ContainerCustomizer<Any, Any, ConcurrentMessageListenerContainer<Any, Any>> {
-        return ContainerCustomizer { container: ConcurrentMessageListenerContainer<Any, Any> ->
+    fun kafkaContainerCustomizer(executor: ThreadPoolTaskExecutor) =
+        ContainerCustomizer { container: ConcurrentMessageListenerContainer<Any, Any> ->
             container.containerProperties.listenerTaskExecutor = executor
         }
-    }
 
     @Bean
-    fun taskScheduler(): TaskScheduler {
-        return ThreadPoolTaskScheduler()
-    }
+    fun taskScheduler(): TaskScheduler = ThreadPoolTaskScheduler()
 
-    override fun configureKafkaListeners(registrar: KafkaListenerEndpointRegistrar) {
+    override fun configureKafkaListeners(registrar: KafkaListenerEndpointRegistrar) =
         registrar.setValidator(validator)
-    }
+
 }
