@@ -7,10 +7,10 @@ import java.time.Instant
 
 data class CommentEventMsg(
     override val eventType: EventType,
-    @field:Positive override val userId: Long,
-    @field:Positive override val imageId: Long,
-    @field:Past override val instant: Instant,
-    @field:Positive val commentId: Long,
-    @field:NotBlank val username: String,
-    @field:NotBlank val comment: String
+    @Positive override val userId: Long,
+    @Positive override val imageId: Long,
+    @Past override val instant: Instant,
+    @Positive val commentId: Long,
+    @NotBlank val username: String,
+    @NotBlank val comment: String
 ) : EventMsg
