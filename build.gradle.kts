@@ -78,8 +78,6 @@ testing {
 
 tasks.jacocoTestReport {
 
-    dependsOn(tasks.test, testing.suites.named("integrationTest"))
-
     executionData.setFrom(
         fileTree(layout.buildDirectory).include("jacoco/*.exec")
     )
