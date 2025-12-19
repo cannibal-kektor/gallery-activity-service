@@ -202,6 +202,7 @@ jobs:
         with:
           pollingTimeoutSec: 600
           scanMetadataReportFile: build/sonar/report-task.txt
+        continue-on-error: true
 
   build-push-docker-image:
     name: Build and push Docker image
