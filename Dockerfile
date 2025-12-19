@@ -13,7 +13,7 @@ COPY src src
 
 RUN --mount=type=cache,target=/home/gradle/.gradle \
     ./gradlew --no-daemon -Dorg.gradle.caching=true -Dorg.gradle.parallel=true \
-    bootJar -x test
+    bootJar -x test -x integrationTest
 
 FROM eclipse-temurin:25-jdk-alpine AS optimizer
 WORKDIR /opt/build
