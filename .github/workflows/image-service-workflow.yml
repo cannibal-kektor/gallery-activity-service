@@ -1,0 +1,252 @@
+name: CI/CD Pipeline for Activity Service
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - master
+
+env:
+  JAVA_VERSION: '25'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build
+        run: ./gradlew bootJar -x test -x integrationTest
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-artifact-jar
+          path: build/libs/*.jar
+          retention-days: 2
+
+      - name: Upload build folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/
+          retention-days: 2
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/
+
+      - name: Run Unit tests
+        run: ./gradlew test
+
+      - name: Upload unit-test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: build/test-results/test/
+          retention-days: 2
+
+      - name: Upload unit tests coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-coverage-unit-report
+          path: build/jacoco/test.exec
+          retention-days: 2
+
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/
+
+      - name: Run IT tests
+        run: ./gradlew integrationTest
+
+      - name: Upload IT reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: it-test-reports
+          path: build/test-results/integrationTest/
+          retention-days: 2
+
+      - name: Upload it tests coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-coverage-it-report
+          path: build/jacoco/integrationTest.exec
+          retention-days: 2
+
+  code-analysis:
+    name: SonarQube Code Analysis
+    runs-on: ubuntu-latest
+    needs: [ unit-tests, integration-tests ]
+    permissions:
+      security-events: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/
+
+      - name: Download unit test reports
+        uses: actions/download-artifact@v4
+        with:
+          name: test-reports
+          path: build/test-results/test/
+
+      - name: Download IT test reports
+        uses: actions/download-artifact@v4
+        with:
+          name: it-test-reports
+          path: build/test-results/integrationTest/
+
+      - name: Download unit coverage exec
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-coverage-unit-report
+          path: build/jacoco/
+
+      - name: Download IT coverage exec
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-coverage-it-report
+          path: build/jacoco/
+
+      - name: Generate Merged JaCoCo XML Report
+        run: ./gradlew jacocoTestReport
+
+      - name: SonarQube analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew sonar
+
+      - name: SonarCloud Quality Gate Check
+        id: sonarqube-quality-gate-check
+        uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          pollingTimeoutSec: 600
+          scanMetadataReportFile: build/sonar/report-task.txt
+
+  build-push-docker-image:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    needs: code-analysis
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    env:
+      IMAGE_NAME: gallery-activity-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=commit-
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/docker-activity-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-activity-image-${{ github.sha }}
+          path: /tmp/docker-activity-image.tar
+          retention-days: 1
